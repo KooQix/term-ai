@@ -22,8 +22,8 @@ TermAI is a powerful, cross-platform CLI tool that brings AI assistance directly
 
 ```bash
 # Clone the repository
-git clone https://github.com/user/termai.git
-cd termai
+git clone https://github.com/KooQix/term-ai.git
+cd term-ai
 
 # Build the binary
 go build -o termai
@@ -38,7 +38,7 @@ go install
 ### Using Go Install
 
 ```bash
-go install github.com/user/termai@latest
+go install github.com/KooQix/term-ai@latest
 ```
 
 ## 🚀 Quick Start

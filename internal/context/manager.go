@@ -1,6 +1,6 @@
 package context
 
-import "github.com/user/termai/internal/provider"
+import "github.com/KooQix/term-ai/internal/provider"
 
 // Manager handles conversation context
 type Manager struct {

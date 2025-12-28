@@ -5,10 +5,10 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/KooQix/term-ai/internal/config"
+	"github.com/KooQix/term-ai/internal/ui"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
-	"github.com/user/termai/internal/config"
-	"github.com/user/termai/internal/ui"
 )
 
 var configCmd = &cobra.Command{

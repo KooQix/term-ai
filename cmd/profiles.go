@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/KooQix/term-ai/internal/config"
+	"github.com/KooQix/term-ai/internal/ui"
 	"github.com/spf13/cobra"
-	"github.com/user/termai/internal/config"
-	"github.com/user/termai/internal/ui"
 )
 
 var profilesCmd = &cobra.Command{

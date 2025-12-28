@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/user/termai/cmd"
+	"github.com/KooQix/term-ai/cmd"
 )
 
 func main() {
