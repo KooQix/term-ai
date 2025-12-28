@@ -155,6 +155,10 @@ func runPrompt(cmd *cobra.Command, args []string) error {
 	if len(attachments) > 0 {
 		fmt.Printf("(with %d attachment(s))\n", len(attachments))
 	}
+	fmt.Println(ui.FormatSeparator())
+
+	// Assistant header
+	fmt.Println(ui.AssistantStyle.Render("Assistant:"))
 	fmt.Println()
 
 	// Stream response
@@ -165,9 +169,7 @@ func runPrompt(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get response: %w", err)
 	}
 
-	ui.ClearSpinner()
-	fmt.Println(ui.AssistantStyle.Render("Assistant:"))
-	fmt.Println()
+	// ui.ClearSpinner()
 
 	// Stream raw content in real-time while accumulating
 	writer := ui.NewStreamWriter()
@@ -188,8 +190,10 @@ func runPrompt(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Println() // Add newline after raw streaming
-	fmt.Println() // Add separator
+	// fmt.Println() // Add newline after raw streaming
+	ui.ClearSpinner() // Clear spinner after streaming is done
+	// Display separator line
+	// fmt.Println(ui.FormatSeparator())
 
 	// Now format and display the complete response with syntax highlighting
 	rawContent := writer.GetContent()
@@ -199,8 +203,9 @@ func runPrompt(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	} else {
 		// Show formatted version
-		fmt.Println(ui.AssistantStyle.Render("Formatted:"))
-		fmt.Println()
+		// TODO: right now we disable the raw stream display to avoid duplication
+		// fmt.Println(ui.AssistantStyle.Render("Formatted:"))
+		// fmt.Println()
 		fmt.Println(formatted)
 	}
 

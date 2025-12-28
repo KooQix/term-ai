@@ -22,7 +22,9 @@ func NewStreamWriter() *StreamWriter {
 // WriteContent writes content chunk and displays it
 func (sw *StreamWriter) WriteContent(chunk string) {
 	sw.content.WriteString(chunk)
-	fmt.Print(chunk)
+
+	// TODO: Right now, disable streaming as it introduces 2 same answers: from the stream, and then the formatted - to be handled later
+	// fmt.Print(chunk)
 }
 
 // WriteThinking writes thinking/reasoning chunk
