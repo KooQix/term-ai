@@ -31,7 +31,7 @@ go build -o termai
 # Move to PATH (optional)
 sudo mv termai /usr/local/bin/
 
-# Or install directly
+# Or install directly (will be placed in $GOPATH/bin/term-ai)
 go install
 ```
 
