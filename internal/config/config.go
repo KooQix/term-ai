@@ -217,7 +217,7 @@ func CreateDefaultConfig() error {
 			AutoClearAfterSend:       true,
 			IncludeContextInEveryMsg: false,
 		},
-		SystemContext: "You're an AI CLI assistant for a software developer. Act and respond accordingly. Be concise and clear, and avoid unnecessary explanation unless it's needed or asked for. You may be asked for various tasks, including commands, debugging, (including long debugging sessions), and various other tasks related to project development.",
+		SystemContext: "You are an AI CLI assistant for a software developer. Provide clear, concise, and actionable responses focused on commands, debugging (including extended sessions), and project development tasks. Use markdown formatting for code and commands. Consider the current project context and previous interactions when necessary. Ask clarifying questions if the request is ambiguous. Avoid unnecessary explanations unless explicitly requested. Handle errors gracefully and suggest best practices or alternatives when appropriate.",
 	}
 
 	return defaultConfig.Save()

@@ -523,6 +523,3 @@ If you encounter any issues or have questions:
 - Check existing issues for solutions
 - Read the troubleshooting section above
 
----
-
-Made with ❤️ by the TermAI team
