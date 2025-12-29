@@ -30,6 +30,13 @@ func (m *Manager) AddAssistantMessage(content string) {
 	})
 }
 
+func (m *Manager) AddSystemMessage(content string) {
+	m.messages = append(m.messages, provider.Message{
+		Role:    "system",
+		Content: content,
+	})
+}
+
 // GetMessages returns all messages
 func (m *Manager) GetMessages() []provider.Message {
 	return m.messages

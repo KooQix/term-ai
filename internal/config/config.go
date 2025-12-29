@@ -36,6 +36,7 @@ type Config struct {
 	Profiles       []Profile  `yaml:"profiles"`
 	UI             UIConfig   `yaml:"ui,omitempty"`
 	Files          FileConfig `yaml:"files,omitempty"`
+	SystemContext  string     `yaml:"system_context,omitempty"`
 }
 
 const (

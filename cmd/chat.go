@@ -60,6 +60,24 @@ type chatModel struct {
 	contextDirPath string
 }
 
+func NewChatModel(cfg *config.Config, ta textarea.Model, vp viewport.Model, prov provider.Provider, profile *config.Profile) chatModel {
+	m := chatModel{
+		textarea:   ta,
+		viewport:   vp,
+		messages:   []string{},
+		ctxManager: ctxmanager.NewManager(),
+		provider:   prov,
+		profile:    profile,
+	}
+
+	// Add system config if defined in config
+	if cfg.SystemContext != "" {
+		m.ctxManager.AddSystemMessage(cfg.SystemContext)
+	}
+
+	return m
+}
+
 type streamMsg struct {
 	chunk   provider.StreamChunk
 	channel <-chan provider.StreamChunk

@@ -149,6 +149,15 @@ func runPrompt(cmd *cobra.Command, args []string) error {
 		},
 	}
 
+	// Add system context if defined in config
+	if cfg.SystemContext != "" {
+		systemMessage := provider.Message{
+			Role:    "system",
+			Content: cfg.SystemContext,
+		}
+		messages = append([]provider.Message{systemMessage}, messages...)
+	}
+
 	// Show header
 	fmt.Println()
 	fmt.Println(ui.FormatUserMessage(prompt))
