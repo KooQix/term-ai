@@ -42,6 +42,9 @@ type Config struct {
 const (
 	ConfigDirName  = ".termai"
 	ConfigFileName = "config.yaml"
+
+	ConversationsDirectory = "conversations"
+	ConversationFileExt    = ".termai.md"
 )
 
 // GetConfigPath returns the path to the config file
@@ -51,6 +54,23 @@ func GetConfigPath() (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 	return filepath.Join(homeDir, ConfigDirName, ConfigFileName), nil
+}
+
+func GetDefaultConversationsPath() (string, error) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+	conversationsPath := filepath.Join(configDir, ConversationsDirectory)
+
+	// If conversations directory doesn't exist, create it
+	if _, err := os.Stat(conversationsPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(conversationsPath, 0o700); err != nil {
+			return "", fmt.Errorf("failed to create conversations directory: %w", err)
+		}
+	}
+
+	return conversationsPath, nil
 }
 
 // GetConfigDir returns the path to the config directory

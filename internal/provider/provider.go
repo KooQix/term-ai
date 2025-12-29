@@ -2,11 +2,19 @@ package provider
 
 import "context"
 
+type ContextRole string
+
+const (
+	RoleUser      ContextRole = "user"
+	RoleAssistant ContextRole = "assistant"
+	RoleSystem    ContextRole = "system"
+)
+
 // Message represents a chat message
 type Message struct {
-	Role    string   `json:"role"`
-	Content string   `json:"content"`
-	Images  []string `json:"images,omitempty"` // base64 data URLs for images
+	Role    ContextRole `json:"role"`
+	Content string      `json:"content"`
+	Images  []string    `json:"images,omitempty"` // base64 data URLs for images
 }
 
 // StreamChunk represents a chunk of streamed response

@@ -32,7 +32,7 @@ type chatRequest struct {
 
 // messageWithContent is used when images are present
 type messageWithContent struct {
-	Role    string        `json:"role"`
+	Role    ContextRole   `json:"role"`
 	Content []contentPart `json:"content"`
 }
 
