@@ -875,28 +875,33 @@ func (m *chatModel) loadConversation(path string) error {
 	}
 
 	// Attach all the context messages to the chat view
+	numMessages := 0
 	for _, msg := range m.ctxManager.GetMessages() {
-		var formatted string
-
-		if msg.Role == provider.RoleUser {
-			formatted = ui.FormatUserMessage(msg.Content)
-			// formatted = ui.UserStyle.Render("You ▸ ") + formatted
-		} else if msg.Role == provider.RoleAssistant {
-			resp, err := ui.FormatResponse(msg.Content)
-			if err != nil {
-				formatted = msg.Content
-			} else {
-				formatted = resp
-			}
-			// formatted = ui.AssistantStyle.Render("Assistant:\n") + formatted
-		} else if msg.Role == provider.RoleSystem {
+		numMessages++
+		if msg.Role == provider.RoleSystem {
 			continue // Skip system messages in chat view
 		}
+
+		var formatted string
+		if msg.Role == provider.RoleUser {
+			formatted = ui.FormatUserMessage(msg.Content)
+		} else if msg.Role == provider.RoleAssistant {
+			// Format the response with syntax highlighting
+			resp, err := ui.FormatResponse(msg.Content)
+			if err != nil {
+				// If formatting fails, use the original response
+				resp = msg.Content
+			}
+			// Add the "Assistant:" prefix after formatting
+			formatted = ui.AssistantStyle.Render("Assistant:\n") + resp
+		}
+
 		m.messages = append(m.messages, formatted)
 		m.messages = append(m.messages, "")
+		m.messages = append(m.messages, ui.FormatSeparator())
 	}
 
-	m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Conversation loaded from '%s', %d messages", path, len(m.messages))))
+	m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Conversation loaded from '%s', %d messages", path, numMessages)))
 
 	m.updateViewport()
 

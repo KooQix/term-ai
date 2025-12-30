@@ -70,7 +70,7 @@ func (m *Manager) GetLastMessage() *provider.Message {
 
 //////////////////// Saving and loading conversations \\\\\\\\\\\\\\\\\\\\
 
-var msgSeparator = strings.Repeat("-", 50) + "\n"
+var msgSeparator = strings.Repeat("-", 50)
 
 // Load loads the conversation from a file
 func (m *Manager) Load(filePath string) error {
@@ -93,29 +93,46 @@ func (m *Manager) Load(filePath string) error {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
+		// Read line by line
 		line := scanner.Text()
 		if line == msgSeparator {
 			continue
 		}
 
-		parts := strings.SplitN(line, ": ", 2)
-		if len(parts) == 2 {
-			// Build the entire message content (in case of multiple lines)
-			msgBody := parts[1]
-			for scanner.Scan() {
-				nextLine := scanner.Text()
-				if nextLine == msgSeparator {
-					break
-				}
-				msgBody += "\n" + nextLine
+		var role provider.ContextRole
+		switch {
+		case strings.Contains(line, fmt.Sprintf("%s: ", provider.RoleUser)):
+			role = provider.RoleUser
+		case strings.Contains(line, fmt.Sprintf("%s: ", provider.RoleAssistant)):
+			role = provider.RoleAssistant
+		case strings.Contains(line, fmt.Sprintf("%s: ", provider.RoleSystem)):
+			role = provider.RoleSystem
+		default:
+			fmt.Printf("Unknown role in line: %s\n", line)
+			continue
+		}
+
+		msgBody := strings.TrimPrefix(line, fmt.Sprintf("%s: ", role))
+
+		// Read the next lines until the separator to get the full message body
+		for scanner.Scan() {
+			nextLine := scanner.Text()
+
+			// Break if we reach the separator - end of message
+			if nextLine == msgSeparator {
+				break
 			}
 
-			msg := provider.Message{
-				Role:    provider.ContextRole(parts[0]),
-				Content: msgBody,
-			}
-			m.messages = append(m.messages, msg)
+			// Append to message body
+			msgBody += "\n" + nextLine
 		}
+
+		// We reached the end of the message, create the message struct
+		msg := provider.Message{
+			Role:    role,
+			Content: msgBody,
+		}
+		m.messages = append(m.messages, msg)
 	}
 
 	return scanner.Err()
@@ -130,26 +147,24 @@ func (m *Manager) Save(filePath string) error {
 		filePath += config.ConversationFileExt
 	}
 
-	var file *os.File
-
-	// If file doesn't exist, create it
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		file, err = os.Create(filePath)
-		if err != nil {
-			return err
+	// If file exists, remove it (so it will be recreated
+	if _, err := os.Stat(filePath); err == nil {
+		if err := os.Remove(filePath); err != nil {
+			return fmt.Errorf("failed to remove existing conversation file: %w", err)
 		}
-	} else {
-		file, err = os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
+	}
 
+	// Create the file
+	file, err := os.Create(filePath)
+	if err != nil {
+		return err
 	}
 
 	defer file.Close()
 
+	// Write all messages to the file
 	for _, msg := range m.messages {
-		_, err := file.WriteString(string(msg.Role) + ": " + msg.Content + "\n" + msgSeparator)
+		_, err := file.WriteString(string(msg.Role) + ": " + msg.Content + "\n" + msgSeparator + "\n")
 		if err != nil {
 			return err
 		}
