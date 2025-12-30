@@ -73,6 +73,8 @@ type chatModel struct {
 	attachedFiles  []*fileprocessor.FileAttachment
 	contextFiles   []*fileprocessor.FileAttachment
 	contextDirPath string
+
+	chatPath string // Path to save/load conversation (only set when saving/loading)
 }
 
 func NewChatModel(cfg *config.Config, ta textarea.Model, vp viewport.Model, prov provider.Provider, profile *config.Profile) chatModel {
@@ -718,6 +720,19 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 		}
 
 	case "/save":
+		// If the chatPath is already set (an no name/path is provided), use it as default
+		if m.chatPath != "" && len(args) == 0 {
+			// Save conversation to existing path
+			if err := m.ctxManager.Save(m.chatPath); err != nil {
+				m.messages = append(m.messages, ui.FormatError(fmt.Errorf("failed to save conversation: %v", err)))
+			} else {
+				m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Conversation saved successfully to '%s'", m.chatPath)))
+			}
+			m.messages = append(m.messages, "")
+			break
+		}
+
+		// Otherwise, expect a name and optional directory
 		if len(args) == 0 {
 			m.messages = append(m.messages, ui.FormatError(fmt.Errorf("/save requires a conversation name")))
 			m.messages = append(m.messages, "")
@@ -774,6 +789,9 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 				if err != nil {
 					m.messages = append(m.messages, ui.FormatError(fmt.Errorf("failed to load conversation: %v", err)))
 					m.messages = append(m.messages, "")
+				} else {
+					// Successfully loaded, set chatPath
+					m.chatPath = absPath
 				}
 				// Success message added in loadConversation
 			}
