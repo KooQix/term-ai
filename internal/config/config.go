@@ -47,6 +47,8 @@ const (
 	ConversationFileExt    = ".termai.md"
 )
 
+var AppConfig *Config
+
 // GetConfigPath returns the path to the config file
 func GetConfigPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -115,6 +117,8 @@ func Load() (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+
+	AppConfig = &cfg
 
 	return &cfg, nil
 }
@@ -228,7 +232,7 @@ func CreateDefaultConfig() error {
 			},
 		},
 		UI: UIConfig{
-			Theme:        "dark",
+			Theme:        "auto",
 			ColorOutput:  true,
 			ShowThinking: true,
 		},
