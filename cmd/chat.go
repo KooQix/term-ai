@@ -12,12 +12,27 @@ import (
 	"github.com/KooQix/term-ai/internal/fileprocessor"
 	"github.com/KooQix/term-ai/internal/provider"
 	"github.com/KooQix/term-ai/internal/ui"
+	"github.com/KooQix/term-ai/internal/utils"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
+
+const availableCommands = `Available commands:
+  /exit or /quit - Exit chat
+  /clear - Clear conversation context
+  /profile - Show current profile info
+  /attach <file> [...] - Attach one or more files
+  /files - Show currently attached files
+  /clear-files - Clear all attached files
+  /context - Show context files from directory
+  /context-add <file> [...] - Add files to context
+  /context-remove <file> - Remove file from context
+  /save <name> -d <optional-directory> - Save conversation
+  /load <path> - Load conversation from file
+  /help - Show this help`
 
 var (
 	chatFilePaths []string
@@ -31,7 +46,7 @@ var (
 	}
 
 	// Available chat commands for auto-completion
-	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove"}
+	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove", "/save", "/load"}
 )
 
 func init() {
@@ -145,14 +160,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 
 	// Add welcome message
 	welcome := fmt.Sprintf("Welcome to TermAI Interactive Chat!\nUsing profile: %s (%s)\n\n", profile.Name, profile.Model)
-	welcome += "Commands:\n"
-	welcome += "  /exit or /quit - Exit chat\n"
-	welcome += "  /clear - Clear conversation context\n"
-	welcome += "  /attach <file> - Attach files\n"
-	welcome += "  /files - Show attached files\n"
-	welcome += "  /clear-files - Clear attached files\n"
-	welcome += "  /context - Show context files\n"
-	welcome += "  /help - Show this help\n\n"
+	welcome += availableCommands
 
 	// Process initial files if provided
 	if len(chatFilePaths) > 0 {
@@ -277,27 +285,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle auto-completion navigation
 		if m.showSuggestions && len(m.suggestions) > 0 {
 			switch msg.Type {
-			case tea.KeyTab:
+			case tea.KeyTab, tea.KeyDown:
 				// Move to next suggestion
 				m.selectedSuggestion = (m.selectedSuggestion + 1) % len(m.suggestions)
 				return m, nil
-			case tea.KeyShiftTab:
+			case tea.KeyShiftTab, tea.KeyUp:
 				// Move to previous suggestion
 				m.selectedSuggestion--
 				if m.selectedSuggestion < 0 {
 					m.selectedSuggestion = len(m.suggestions) - 1
 				}
-				return m, nil
-			case tea.KeyUp:
-				// Move to previous suggestion
-				m.selectedSuggestion--
-				if m.selectedSuggestion < 0 {
-					m.selectedSuggestion = len(m.suggestions) - 1
-				}
-				return m, nil
-			case tea.KeyDown:
-				// Move to next suggestion
-				m.selectedSuggestion = (m.selectedSuggestion + 1) % len(m.suggestions)
 				return m, nil
 			case tea.KeyEnter:
 				// If suggestions are showing and Enter is pressed, accept the selected suggestion
@@ -570,10 +567,7 @@ func (m chatModel) renderFooter() string {
 	totalWidth := m.viewport.Width
 	hintsWidth := lipgloss.Width(hints)
 	shortcutsWidth := lipgloss.Width(shortcuts)
-	spacing := totalWidth - hintsWidth - shortcutsWidth
-	if spacing < 0 {
-		spacing = 0
-	}
+	spacing := max(totalWidth-hintsWidth-shortcutsWidth, 0)
 
 	return hints + strings.Repeat(" ", spacing) + shortcuts
 }
@@ -627,14 +621,14 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 	command := parts[0]
 	args := parts[1:]
 
-	switch {
-	case command == "/exit" || command == "/quit":
+	switch command {
+	case "/exit", "/quit":
 		return m, tea.Quit
-	case command == "/clear":
+	case "/clear":
 		m.ctxManager.Clear()
 		m.messages = append(m.messages, ui.FormatSuccess("Conversation context cleared"))
 		m.messages = append(m.messages, "")
-	case command == "/profile":
+	case "/profile":
 		info := fmt.Sprintf("Current Profile: %s\n", m.profile.Name)
 		info += fmt.Sprintf("Provider: %s\n", m.profile.Provider)
 		info += fmt.Sprintf("Model: %s\n", m.profile.Model)
@@ -643,7 +637,7 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 		info += fmt.Sprintf("Max Tokens: %d\n", m.profile.MaxTokens)
 		m.messages = append(m.messages, ui.InfoStyle.Render(info))
 		m.messages = append(m.messages, "")
-	case command == "/attach":
+	case "/attach":
 		if len(args) == 0 {
 			m.messages = append(m.messages, ui.FormatError(fmt.Errorf("/attach requires at least one file path")))
 			m.messages = append(m.messages, "")
@@ -658,7 +652,7 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 			}
 			m.messages = append(m.messages, "")
 		}
-	case command == "/files":
+	case "/files":
 		if len(m.attachedFiles) == 0 {
 			m.messages = append(m.messages, ui.InfoStyle.Render("No files currently attached"))
 		} else {
@@ -669,12 +663,12 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, ui.InfoStyle.Render(info))
 		}
 		m.messages = append(m.messages, "")
-	case command == "/clear-files":
+	case "/clear-files":
 		count := len(m.attachedFiles)
 		m.attachedFiles = nil
 		m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Cleared %d attached file(s)", count)))
 		m.messages = append(m.messages, "")
-	case command == "/context":
+	case "/context":
 		if len(m.contextFiles) == 0 {
 			m.messages = append(m.messages, ui.InfoStyle.Render("No context files loaded"))
 		} else {
@@ -686,7 +680,7 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, ui.InfoStyle.Render(info))
 		}
 		m.messages = append(m.messages, "")
-	case command == "/context-add":
+	case "/context-add":
 		if len(args) == 0 {
 			m.messages = append(m.messages, ui.FormatError(fmt.Errorf("/context-add requires at least one file path")))
 			m.messages = append(m.messages, "")
@@ -701,7 +695,7 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 			}
 			m.messages = append(m.messages, "")
 		}
-	case command == "/context-remove":
+	case "/context-remove":
 		if len(args) == 0 {
 			m.messages = append(m.messages, ui.FormatError(fmt.Errorf("/context-remove requires a filename")))
 			m.messages = append(m.messages, "")
@@ -722,19 +716,70 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 			}
 			m.messages = append(m.messages, "")
 		}
-	case command == "/help":
-		help := "Available commands:\n"
-		help += "  /exit or /quit - Exit chat\n"
-		help += "  /clear - Clear conversation context\n"
-		help += "  /profile - Show current profile info\n"
-		help += "  /attach <file> [...] - Attach one or more files\n"
-		help += "  /files - Show currently attached files\n"
-		help += "  /clear-files - Clear all attached files\n"
-		help += "  /context - Show context files from directory\n"
-		help += "  /context-add <file> [...] - Add files to context\n"
-		help += "  /context-remove <file> - Remove file from context\n"
-		help += "  /help - Show this help\n"
-		m.messages = append(m.messages, ui.InfoStyle.Render(help))
+
+	case "/save":
+		if len(args) == 0 {
+			m.messages = append(m.messages, ui.FormatError(fmt.Errorf("/save requires a conversation name")))
+			m.messages = append(m.messages, "")
+		} else {
+			name := args[0]
+			dir, err := config.GetDefaultConversationsPath()
+			if err != nil {
+				m.messages = append(m.messages, ui.FormatError(fmt.Errorf("failed to get default conversations path: %w", err)))
+				m.messages = append(m.messages, "")
+				return m, nil
+			}
+			if len(args) > 2 && args[1] == "-d" {
+				if absDir, err := utils.GetAbsolutePath(args[2]); err != nil {
+					m.messages = append(m.messages, ui.FormatError(fmt.Errorf("invalid directory path: %w", err)))
+					m.messages = append(m.messages, "")
+					return m, nil
+				} else {
+					dir = absDir
+				}
+			}
+
+			// Save conversation
+			if err := m.ctxManager.Save(filepath.Join(dir, name)); err != nil {
+				m.messages = append(m.messages, ui.FormatError(fmt.Errorf("failed to save conversation: %v", err)))
+			} else {
+				m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Conversation '%s' saved successfully", name)))
+			}
+			m.messages = append(m.messages, "")
+		}
+	case "/load":
+		if len(args) == 0 {
+			m.messages = append(m.messages, ui.FormatError(fmt.Errorf("/load requires a conversation file path")))
+			m.messages = append(m.messages, "")
+		} else {
+			path := args[0] + config.ConversationFileExt
+
+			// Path can be only a filename - look in default conversations dir
+			if !filepath.IsAbs(path) && !strings.Contains(path, string(os.PathSeparator)) {
+				defaultDir, err := config.GetDefaultConversationsPath()
+				if err != nil {
+					m.messages = append(m.messages, ui.FormatError(fmt.Errorf("failed to get default conversations path: %w", err)))
+					m.messages = append(m.messages, "")
+					return m, nil
+				}
+				path = filepath.Join(defaultDir, path)
+			}
+
+			// Load conversation
+			if absPath, err := utils.GetAbsolutePath(path); err != nil {
+				m.messages = append(m.messages, ui.FormatError(fmt.Errorf("invalid file path: %w", err)))
+				m.messages = append(m.messages, "")
+			} else {
+				err := m.loadConversation(absPath)
+				if err != nil {
+					m.messages = append(m.messages, ui.FormatError(fmt.Errorf("failed to load conversation: %v", err)))
+					m.messages = append(m.messages, "")
+				}
+				// Success message added in loadConversation
+			}
+		}
+	case "/help":
+		m.messages = append(m.messages, ui.InfoStyle.Render(availableCommands))
 		m.messages = append(m.messages, "")
 	default:
 		m.messages = append(m.messages, ui.FormatError(fmt.Errorf("unknown command: %s", command)))
@@ -821,4 +866,44 @@ func subscribeToStream(chunkChan <-chan provider.StreamChunk) tea.Cmd {
 			channel: chunkChan,
 		}
 	}
+}
+
+func (m *chatModel) loadConversation(path string) error {
+	// Load the conversation into the context manager
+	if err := m.ctxManager.Load(path); err != nil {
+		return fmt.Errorf("failed to load conversation: %w", err)
+	}
+
+	// Attach all the context messages to the chat view
+	numMessages := 0
+	for _, msg := range m.ctxManager.GetMessages() {
+		numMessages++
+		if msg.Role == provider.RoleSystem {
+			continue // Skip system messages in chat view
+		}
+
+		var formatted string
+		if msg.Role == provider.RoleUser {
+			formatted = ui.FormatUserMessage(msg.Content)
+		} else if msg.Role == provider.RoleAssistant {
+			// Format the response with syntax highlighting
+			resp, err := ui.FormatResponse(msg.Content)
+			if err != nil {
+				// If formatting fails, use the original response
+				resp = msg.Content
+			}
+			// Add the "Assistant:" prefix after formatting
+			formatted = ui.AssistantStyle.Render("Assistant:\n") + resp
+		}
+
+		m.messages = append(m.messages, formatted)
+		m.messages = append(m.messages, "")
+		m.messages = append(m.messages, ui.FormatSeparator())
+	}
+
+	m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Conversation loaded from '%s', %d messages", path, numMessages)))
+
+	m.updateViewport()
+
+	return nil
 }
