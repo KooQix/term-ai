@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/KooQix/term-ai/internal/config"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -225,7 +226,8 @@ func highlightCode(code, language string) (string, error) {
 	lexer = chroma.Coalesce(lexer)
 
 	// Get the style (dracula for dark terminals)
-	style := styles.Get("dracula")
+	style := styles.Get(config.AppConfig.UI.Theme)
+
 	if style == nil {
 		style = styles.Fallback
 	}

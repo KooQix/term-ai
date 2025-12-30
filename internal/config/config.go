@@ -44,6 +44,8 @@ const (
 	ConfigFileName = "config.yaml"
 )
 
+var AppConfig *Config
+
 // GetConfigPath returns the path to the config file
 func GetConfigPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -95,6 +97,8 @@ func Load() (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+
+	AppConfig = &cfg
 
 	return &cfg, nil
 }
