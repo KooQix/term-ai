@@ -108,25 +108,30 @@ func detectFormat(content string) ContentFormat {
 
 // FormatResponse is the main formatting function with auto-detection
 func FormatResponse(content string) (string, error) {
-	format := detectFormat(content)
+	// TODO: For now, only use markdown formatting
+	// In the future, implement format detection and appropriate formatting
 
-	switch format {
-	case ContentFormatJSON:
-		return FormatJSON(content)
-	case ContentFormatYAML:
-		return FormatYAML(content)
-	case ContentFormatXML:
-		return FormatXML(content)
-	case ContentFormatMarkdown:
-		return FormatMarkdown(content)
-	default:
-		// For plain text or unknown, try markdown anyway as it handles plain text well
-		formatted, err := FormatMarkdown(content)
-		if err != nil {
-			return content, nil
-		}
-		return formatted, nil
-	}
+	return FormatMarkdown(content)
+
+	// format := detectFormat(content)
+
+	// switch format {
+	// case ContentFormatMarkdown:
+	// 	return FormatMarkdown(content)
+	// case ContentFormatJSON:
+	// 	return FormatJSON(content)
+	// case ContentFormatYAML:
+	// 	return FormatYAML(content)
+	// case ContentFormatXML:
+	// 	return FormatXML(content)
+	// default:
+	// 	// For plain text or unknown, try markdown anyway as it handles plain text well
+	// 	formatted, err := FormatMarkdown(content)
+	// 	if err != nil {
+	// 		return content, nil
+	// 	}
+	// 	return formatted, nil
+	// }
 }
 
 // FormatJSON formats JSON content with syntax highlighting
@@ -177,7 +182,7 @@ func FormatXML(content string) (string, error) {
 func FormatMarkdown(content string) (string, error) {
 	// Try dark style first (works best for most terminals)
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStandardStyle(config.AppConfig.UI.Theme),
 		glamour.WithWordWrap(100),
 	)
 	if err != nil {

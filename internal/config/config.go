@@ -212,7 +212,7 @@ func CreateDefaultConfig() error {
 			},
 		},
 		UI: UIConfig{
-			Theme:        "dark",
+			Theme:        "auto",
 			ColorOutput:  true,
 			ShowThinking: true,
 		},
