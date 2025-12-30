@@ -225,7 +225,7 @@ func highlightCode(code, language string) (string, error) {
 	}
 	lexer = chroma.Coalesce(lexer)
 
-	// Get the style (dracula for dark terminals)
+	// Get the style from config
 	style := styles.Get(config.AppConfig.UI.Theme)
 
 	if style == nil {
