@@ -2,9 +2,26 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/KooQix/term-ai/internal/config"
 )
+
+var Logger *log.Logger
+
+func init() {
+	configPath, err := config.GetConfigDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	file, err := os.OpenFile(fmt.Sprintf("%s/logs.log", configPath), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	Logger = log.New(file, "", log.LstdFlags)
+}
 
 // Get the absolute path of a given directory, and ensure the path exists
 func GetAbsolutePath(dirPath string) (string, error) {
