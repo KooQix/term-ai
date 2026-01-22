@@ -47,7 +47,15 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	data, err := yaml.Marshal(cfg)
+	// Copy the config to replace all API Keys with ****
+	maskedCfg := *cfg
+	for i, profile := range maskedCfg.Profiles {
+		if profile.APIKey != "" {
+			maskedCfg.Profiles[i].APIKey = "****"
+		}
+	}
+
+	data, err := yaml.Marshal(maskedCfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}

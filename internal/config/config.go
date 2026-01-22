@@ -17,6 +17,8 @@ type Profile struct {
 	Temperature float64 `yaml:"temperature"`
 	MaxTokens   int     `yaml:"max_tokens"`
 	TopP        float64 `yaml:"top_p,omitempty"`
+
+	SystemContext *string `yaml:"system_context"` // nil means use global system context || empty string means no system context
 }
 
 type UIConfig struct {
@@ -150,6 +152,13 @@ func (c *Config) Save() error {
 func (c *Config) GetProfile(name string) (*Profile, error) {
 	for _, p := range c.Profiles {
 		if p.Name == name {
+
+			// Load the correct context if needed
+			if p.SystemContext == nil {
+				// Use global system context
+				p.SystemContext = &c.SystemContext
+			} // else, use the profile-specific context (even if it's an empty string)
+
 			return &p, nil
 		}
 	}
@@ -204,31 +213,34 @@ func CreateDefaultConfig() error {
 		DefaultProfile: "abacus",
 		Profiles: []Profile{
 			{
-				Name:        "abacus",
-				Provider:    "abacus",
-				Endpoint:    "https://api.abacus.ai/v1",
-				APIKey:      "your-abacus-api-key",
-				Model:       "gpt-4",
-				Temperature: 0.7,
-				MaxTokens:   2000,
+				Name:          "abacus",
+				Provider:      "abacus",
+				Endpoint:      "https://api.abacus.ai/v1",
+				APIKey:        "your-abacus-api-key",
+				Model:         "gpt-4",
+				Temperature:   0.7,
+				MaxTokens:     2000,
+				SystemContext: nil,
 			},
 			{
-				Name:        "openai",
-				Provider:    "openai",
-				Endpoint:    "https://api.openai.com/v1",
-				APIKey:      "your-openai-api-key",
-				Model:       "gpt-4",
-				Temperature: 0.7,
-				MaxTokens:   2000,
+				Name:          "openai",
+				Provider:      "openai",
+				Endpoint:      "https://api.openai.com/v1",
+				APIKey:        "your-openai-api-key",
+				Model:         "gpt-4",
+				Temperature:   0.7,
+				MaxTokens:     2000,
+				SystemContext: nil,
 			},
 			{
-				Name:        "ollama",
-				Provider:    "ollama",
-				Endpoint:    "http://localhost:11434/v1",
-				APIKey:      "ollama",
-				Model:       "llama3.1",
-				Temperature: 0.7,
-				MaxTokens:   2000,
+				Name:          "ollama",
+				Provider:      "ollama",
+				Endpoint:      "http://localhost:11434/v1",
+				APIKey:        "ollama",
+				Model:         "llama3.1",
+				Temperature:   0.7,
+				MaxTokens:     2000,
+				SystemContext: nil,
 			},
 		},
 		UI: UIConfig{

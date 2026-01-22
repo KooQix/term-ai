@@ -88,8 +88,10 @@ func NewChatModel(cfg *config.Config, ta textarea.Model, vp viewport.Model, prov
 	}
 
 	// Add system config if defined in config
-	if cfg.SystemContext != "" {
-		m.ctxManager.AddSystemMessage(cfg.SystemContext)
+	// Get from the profile (can be nil, empty, or non-empty)
+	// Profile context set by cfg.GetProfile
+	if *profile.SystemContext != "" {
+		m.ctxManager.AddSystemMessage(*profile.SystemContext)
 	}
 
 	return m
@@ -151,17 +153,10 @@ func runChat(cmd *cobra.Command, args []string) error {
 
 	vp := viewport.New(80, 20)
 
-	m := chatModel{
-		textarea:   ta,
-		viewport:   vp,
-		messages:   []string{},
-		ctxManager: ctxmanager.NewManager(),
-		provider:   prov,
-		profile:    profile,
-	}
+	m := NewChatModel(cfg, ta, vp, prov, profile)
 
 	// Add welcome message
-	welcome := fmt.Sprintf("Welcome to TermAI Interactive Chat!\nUsing profile: %s (%s)\n\n", profile.Name, profile.Model)
+	welcome := fmt.Sprintf("Welcome to TermAI Interactive Chat!\nUsing profile: %s (%s)\nContext: %s\n\n", profile.Name, profile.Model, *profile.SystemContext)
 	welcome += availableCommands
 
 	// Process initial files if provided
