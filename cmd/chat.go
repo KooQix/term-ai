@@ -145,7 +145,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	ta := textarea.New()
 	ta.Placeholder = "Type your message... (Alt+Enter or Ctrl+Enter to send)"
 	ta.Focus()
-	ta.CharLimit = 5000
+	ta.CharLimit = 0 // No limit
 	ta.SetWidth(80)
 	ta.SetHeight(3)
 
