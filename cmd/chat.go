@@ -32,6 +32,7 @@ const availableCommands = `Available commands:
   /context-remove <file> - Remove file from context
   /save <name> -d <optional-directory> - Save conversation
   /load <path> - Load conversation from file
+  /cp   - Copy the last assistant response to clipboard
   /help - Show this help`
 
 var (
@@ -46,7 +47,7 @@ var (
 	}
 
 	// Available chat commands for auto-completion
-	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove", "/save", "/load"}
+	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove", "/save", "/load", "/cp"}
 )
 
 func init() {
@@ -151,7 +152,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	ta.SetWidth(80)
 	ta.SetHeight(3)
 
-	vp := viewport.New(80, 20)
+	vp := viewport.New(150, 20)
 
 	m := NewChatModel(cfg, ta, vp, prov, profile)
 
@@ -789,6 +790,24 @@ func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
 					m.chatPath = absPath
 				}
 				// Success message added in loadConversation
+			}
+		}
+
+	case "/cp":
+		// Copy last assistant response to clipboard
+		var lastResponse string
+		// Get the last assistant message from context manager
+		messages := m.ctxManager.GetMessages()
+		for i := len(messages) - 1; i >= 0; i-- {
+			if messages[i].Role == provider.RoleAssistant {
+				lastResponse = messages[i].Content
+				break
+			}
+		}
+
+		if lastResponse != "" {
+			if err := utils.CopyToClipboard(lastResponse); err != nil {
+				m.messages = append(m.messages, ui.FormatError(fmt.Errorf("failed to copy to clipboard: %v", err)))
 			}
 		}
 	case "/help":

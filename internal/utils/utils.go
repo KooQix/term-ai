@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/atotto/clipboard"
 )
 
 // Get the absolute path of a given directory, and ensure the path exists
@@ -27,4 +29,13 @@ func GetAbsolutePath(dirPath string) (string, error) {
 	}
 
 	return absPath, nil
+}
+
+func CopyToClipboard(text string) error {
+	// Use the clipboard package to write text to the clipboard
+	err := clipboard.WriteAll(text)
+	if err != nil {
+		return fmt.Errorf("failed to copy to clipboard: %w", err)
+	}
+	return nil
 }
