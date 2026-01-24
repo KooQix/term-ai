@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wordwrap"
 	"github.com/spf13/cobra"
 )
 
@@ -152,13 +153,13 @@ func runChat(cmd *cobra.Command, args []string) error {
 	ta.SetWidth(80)
 	ta.SetHeight(3)
 
-	vp := viewport.New(150, 20)
+	vp := viewport.New(150, 80)
 
 	m := NewChatModel(cfg, ta, vp, prov, profile)
 
 	// Add welcome message
-	welcome := fmt.Sprintf("Welcome to TermAI Interactive Chat!\nUsing profile: %s (%s)\nContext: %s\n\n", profile.Name, profile.Model, *profile.SystemContext)
-	welcome += availableCommands
+	welcome := fmt.Sprintf("Context: %s\n\n", wordwrap.String(*profile.SystemContext, vp.Width-2))
+	welcome += "Type /help to see available commands.\n"
 
 	// Process initial files if provided
 	if len(chatFilePaths) > 0 {
@@ -276,6 +277,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - 6 // Compact layout for maximum viewport space
 		m.textarea.SetWidth(msg.Width - 7) // Account for "You ▸ " prompt
+		m.viewport.SetContent(wordwrap.String(m.messages[len(m.messages)-1], m.viewport.Width))
 		m.ready = true
 		m.updateViewport()
 
