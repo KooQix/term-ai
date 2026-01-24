@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -201,6 +202,15 @@ func (c *Config) RemoveProfile(name string) error {
 		}
 	}
 	return fmt.Errorf("profile '%s' not found", name)
+}
+
+func GetDisplayPath(originalPath string) string {
+	if originalPath == "" {
+		return ""
+	}
+
+	originalPath = strings.TrimSuffix(originalPath, ConversationFileExt)
+	return filepath.Base(originalPath)
 }
 
 // CreateDefaultConfig creates a default configuration file

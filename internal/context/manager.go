@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/KooQix/term-ai/internal/config"
@@ -147,7 +148,15 @@ func (m *Manager) Save(filePath string) error {
 		filePath += config.ConversationFileExt
 	}
 
-	// If file exists, remove it (so it will be recreated
+	// Check if the directory exists, create it if not
+	dir := filepath.Dir(filePath)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return fmt.Errorf("failed to create conversation directory: %w", err)
+		}
+	}
+
+	// If file exists, remove it (so it will be recreated)
 	if _, err := os.Stat(filePath); err == nil {
 		if err := os.Remove(filePath); err != nil {
 			return fmt.Errorf("failed to remove existing conversation file: %w", err)

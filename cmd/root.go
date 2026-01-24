@@ -48,6 +48,7 @@ func init() {
 	rootCmd.AddCommand(chatCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(profilesCmd)
+	rootCmd.AddCommand(convCmd)
 }
 
 func Execute() error {
