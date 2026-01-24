@@ -39,11 +39,42 @@ func (m *Manager) AddAssistantMessage(content string) {
 	})
 }
 
-func (m *Manager) AddSystemMessage(content string) {
-	m.messages = append(m.messages, provider.Message{
-		Role:    provider.RoleSystem,
-		Content: content,
-	})
+func (m *Manager) SetSystemMessage(content string) {
+	if len(m.messages) > 0 {
+		// Update the first system message
+		for i, msg := range m.messages {
+			if msg.Role == provider.RoleSystem {
+				if content == "" {
+					// Remove the system message
+					m.messages = append(m.messages[:i], m.messages[i+1:]...)
+					return
+				}
+
+				// Update existing system message
+				m.messages[i].Content = content
+				return
+			}
+		}
+
+		// If we're here, no system message was found - add one at the start
+		if content != "" {
+			m.messages = append([]provider.Message{
+				{
+					Role:    provider.RoleSystem,
+					Content: content,
+				},
+			}, m.messages...)
+			return
+		}
+	}
+
+	// If no system message exists, add one
+	if content != "" {
+		m.messages = append(m.messages, provider.Message{
+			Role:    provider.RoleSystem,
+			Content: content,
+		})
+	}
 }
 
 // GetMessages returns all messages
@@ -75,8 +106,8 @@ var msgSeparator = strings.Repeat("-", 50)
 
 // Load loads the conversation from a file
 func (m *Manager) Load(filePath string) error {
-	if !strings.HasSuffix(filePath, config.ConversationFileExt) {
-		return fmt.Errorf("Invalid file path: %s. Conversation must be a valid file, and including the %s extension", filePath, config.ConversationFileExt)
+	if !strings.HasSuffix(filePath, config.ChatFileExt) {
+		return fmt.Errorf("Invalid file path: %s. Conversation must be a valid file, and including the %s extension", filePath, config.ChatFileExt)
 	}
 
 	// Now check that the file exists
@@ -144,8 +175,8 @@ func (m *Manager) Load(filePath string) error {
 func (m *Manager) Save(filePath string) error {
 	// Filepath is path/to/conversation/conversation-name.termai.md
 	// Ensure the conversation name has the correct extension
-	if !strings.HasSuffix(filePath, config.ConversationFileExt) {
-		filePath += config.ConversationFileExt
+	if !strings.HasSuffix(filePath, config.ChatFileExt) {
+		filePath += config.ChatFileExt
 	}
 
 	// Check if the directory exists, create it if not

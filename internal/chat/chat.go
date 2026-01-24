@@ -27,7 +27,7 @@ type chatModel struct {
 	messages           []string
 	ctxManager         *ctxmanager.Manager
 	provider           provider.Provider
-	profile            *config.Profile
+	Profile            *config.Profile
 	streaming          bool
 	currentResp        string
 	streamChan         <-chan provider.StreamChunk
@@ -47,26 +47,26 @@ type chatModel struct {
 	commandsHandler *commandHandler
 }
 
-func NewChatModel(cfg *config.Config, ta textarea.Model, vp viewport.Model, prov provider.Provider, profile *config.Profile, commands ChatCommands) chatModel {
-	m := chatModel{
+func NewChatModel(cfg *config.Config, ta textarea.Model, vp viewport.Model, prov provider.Provider, profile *config.Profile, commands ChatCommands) *chatModel {
+	m := &chatModel{
 		textarea:   ta,
 		viewport:   vp,
 		messages:   []string{},
 		ctxManager: ctxmanager.NewManager(),
 		provider:   prov,
-		profile:    profile,
+		Profile:    profile,
 
 		commands: commands,
 	}
 
 	// Add the command handler
-	m.commandsHandler = newCommandHandler(&m)
+	m.commandsHandler = newCommandHandler(m)
 
 	// Add system config if defined in config
 	// Get from the profile (can be nil, empty, or non-empty)
 	// Profile context set by cfg.GetProfile
 	if *profile.SystemContext != "" {
-		m.ctxManager.AddSystemMessage(*profile.SystemContext)
+		m.ctxManager.SetSystemMessage(*profile.SystemContext)
 	}
 
 	return m
@@ -85,11 +85,11 @@ func (e errMsg) Error() string {
 	return e.err.Error()
 }
 
-func (m chatModel) Init() tea.Cmd {
+func (m *chatModel) Init() tea.Cmd {
 	return textarea.Blink
 }
 
-func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		tiCmd tea.Cmd
 		vpCmd tea.Cmd
@@ -116,7 +116,9 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - 6 // Compact layout for maximum viewport space
 		m.textarea.SetWidth(msg.Width - 7) // Account for "You ▸ " prompt
-		m.viewport.SetContent(wordwrap.String(m.messages[len(m.messages)-1], m.viewport.Width))
+		if len(m.messages) > 0 {
+			m.viewport.SetContent(wordwrap.String(m.messages[len(m.messages)-1], m.viewport.Width))
+		}
 		m.ready = true
 		m.updateViewport()
 
@@ -162,7 +164,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Handle commands
 				if strings.HasPrefix(userMsg, "/") {
-					return m.handleCommand(userMsg)
+					return m.commandsHandler.handle(userMsg)
 				}
 
 				// Add user message
@@ -252,19 +254,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(tiCmd, vpCmd)
 }
 
-func (m chatModel) handleCommand(cmd string) (tea.Model, tea.Cmd) {
-	chatModel, errCmd := m.commandsHandler.handle(cmd)
-
-	if errCmd != nil {
-		return chatModel, errCmd
-	}
-
-	m.textarea.Reset()
-	m.updateViewport()
-	return chatModel, nil
-}
-
-func (m chatModel) streamResponse() tea.Cmd {
+func (m *chatModel) streamResponse() tea.Cmd {
 	// Start streaming
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -342,23 +332,46 @@ func subscribeToStream(chunkChan <-chan provider.StreamChunk) tea.Cmd {
 	}
 }
 
-func (m *chatModel) loadConversation(path string) error {
-	// Load the conversation into the context manager
+func (m *chatModel) loadChat(path string) error {
+	// Load the chat into the context manager
+	// And override the current context with the one set for the chat
 	if err := m.ctxManager.Load(path); err != nil {
-		return fmt.Errorf("failed to load conversation: %w", err)
+		return fmt.Errorf("failed to load chat: %w", err)
 	}
+
+	// Reset the chat messages
+	m.messages = make([]string, 0)
+
+	// Update the system context in the profile, and use the one set for the conversation
+	messages := m.ctxManager.GetMessages()
+
+	if len(messages) > 0 {
+		firstMessage := &messages[0]
+		if firstMessage.Role == provider.RoleSystem {
+			m.Profile.SystemContext = &firstMessage.Content
+		} else {
+			// No system message, clear the profile system context
+			m.Profile.SystemContext = nil
+		}
+	}
+
+	// Set the contextManager context to the loaded chat
+	systemContext := ""
+	if m.Profile.SystemContext != nil {
+		systemContext = *m.Profile.SystemContext
+	}
+	m.ctxManager.SetSystemMessage(systemContext)
 
 	// Attach all the context messages to the chat view
 	numMessages := 0
 	for _, msg := range m.ctxManager.GetMessages() {
-		numMessages++
-		if msg.Role == provider.RoleSystem {
-			continue // Skip system messages in chat view
+		if msg.Role != provider.RoleSystem {
+			numMessages++
 		}
 
 		var formatted string
 		if msg.Role == provider.RoleUser {
-			formatted = ui.FormatUserMessage(msg.Content)
+			formatted = ui.FormatUserMessage(wordwrap.String(msg.Content, m.viewport.Width-5))
 		} else if msg.Role == provider.RoleAssistant {
 			// Format the response with syntax highlighting
 			resp, err := ui.FormatResponse(msg.Content)
@@ -368,6 +381,9 @@ func (m *chatModel) loadConversation(path string) error {
 			}
 			// Add the "Assistant:" prefix after formatting
 			formatted = ui.AssistantStyle.Render("Assistant:\n") + resp
+		} else if msg.Role == provider.RoleSystem {
+			// Display system messages differently
+			formatted = ui.FormatSystemMessage(wordwrap.String(msg.Content, m.viewport.Width-5))
 		}
 
 		m.messages = append(m.messages, formatted)
@@ -375,10 +391,18 @@ func (m *chatModel) loadConversation(path string) error {
 		m.messages = append(m.messages, ui.FormatSeparator())
 	}
 
-	m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Conversation loaded from '%s', %d messages", path, numMessages)))
+	m.messages = append(m.messages, ui.FormatSuccess(fmt.Sprintf("Chat loaded from '%s', %d messages", path, numMessages)))
 
 	m.updateViewport()
 
+	return nil
+}
+
+func (m *chatModel) LoadChatHandler(path string) error {
+	_, err := m.commandsHandler.LoadChat([]string{path})
+	if err != nil {
+		return fmt.Errorf("failed to load chat: %v", err)
+	}
 	return nil
 }
 

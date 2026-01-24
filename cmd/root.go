@@ -48,7 +48,6 @@ func init() {
 	rootCmd.AddCommand(chatCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(profilesCmd)
-	rootCmd.AddCommand(convCmd)
 }
 
 func Execute() error {
@@ -150,11 +149,13 @@ func runPrompt(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Add system context if defined in config
-	if cfg.SystemContext != "" {
+	// Add system context if defined in profile
+	// If no context is defined for the given profile, will take the default one from config
+	// If none is defined there either, no system message will be added
+	if profile.SystemContext != nil && *profile.SystemContext != "" {
 		systemMessage := provider.Message{
-			Role:    "system",
-			Content: cfg.SystemContext,
+			Role:    provider.RoleSystem,
+			Content: *profile.SystemContext,
 		}
 		messages = append([]provider.Message{systemMessage}, messages...)
 	}

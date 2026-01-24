@@ -33,6 +33,9 @@ func (c *commandHandler) handle(cmd string) (tea.Model, tea.Cmd) {
 	command := parts[0]
 	args := parts[1:]
 
+	// var res tea.Model
+	// var err tea.Cmd
+
 	switch command {
 	case "/exit", "/quit":
 		return c.m, tea.Quit
@@ -56,9 +59,9 @@ func (c *commandHandler) handle(cmd string) (tea.Model, tea.Cmd) {
 	case "/context-remove":
 		c.removeContext(args)
 	case "/save":
-		c.saveConversation(args)
+		c.saveChat(args)
 	case "/load":
-		c.loadConversation(args)
+		c.LoadChat(args)
 	case "/cp":
 		c.copyLastAssistantMessage()
 	case "/help":
@@ -67,16 +70,23 @@ func (c *commandHandler) handle(cmd string) (tea.Model, tea.Cmd) {
 		c.m.AddMessage(ui.FormatError(fmt.Errorf("unknown command: %s", command)))
 	}
 
+	// if err != nil {
+	// 	return res, err
+	// }
+
+	c.m.textarea.Reset()
+	c.m.updateViewport()
+
 	return c.m, nil
 }
 
 func (c *commandHandler) profile() {
-	info := fmt.Sprintf("Current Profile: %s\n", c.m.profile.Name)
-	info += fmt.Sprintf("Provider: %s\n", c.m.profile.Provider)
-	info += fmt.Sprintf("Model: %s\n", c.m.profile.Model)
-	info += fmt.Sprintf("Endpoint: %s\n", c.m.profile.Endpoint)
-	info += fmt.Sprintf("Temperature: %.2f\n", c.m.profile.Temperature)
-	info += fmt.Sprintf("Max Tokens: %d\n", c.m.profile.MaxTokens)
+	info := fmt.Sprintf("Current Profile: %s\n", c.m.Profile.Name)
+	info += fmt.Sprintf("Provider: %s\n", c.m.Profile.Provider)
+	info += fmt.Sprintf("Model: %s\n", c.m.Profile.Model)
+	info += fmt.Sprintf("Endpoint: %s\n", c.m.Profile.Endpoint)
+	info += fmt.Sprintf("Temperature: %.2f\n", c.m.Profile.Temperature)
+	info += fmt.Sprintf("Max Tokens: %d\n", c.m.Profile.MaxTokens)
 
 	c.m.AddMessage(ui.InfoStyle.Render(info))
 }
@@ -159,26 +169,26 @@ func (c *commandHandler) removeContext(args []string) {
 	}
 }
 
-func (c *commandHandler) saveConversation(args []string) {
+func (c *commandHandler) saveChat(args []string) {
 	// If the chatPath is already set (an no name/path is provided), use it as default
 	if c.m.chatPath != "" && len(args) == 0 {
-		// Save conversation to existing path
+		// Save chat to existing path
 		if err := c.m.ctxManager.Save(c.m.chatPath); err != nil {
-			c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to save conversation: %v", err)))
+			c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to save chat: %v", err)))
 		} else {
-			c.m.AddMessage(ui.FormatSuccess(fmt.Sprintf("Conversation saved successfully to '%s'", c.m.chatPath)))
+			c.m.AddMessage(ui.FormatSuccess(fmt.Sprintf("Chat saved successfully to '%s'", c.m.chatPath)))
 		}
 		return
 	}
 
 	// Otherwise, expect a name and optional directory
 	if len(args) == 0 {
-		c.m.AddMessage(ui.FormatError(fmt.Errorf("/save requires a conversation name")))
+		c.m.AddMessage(ui.FormatError(fmt.Errorf("/save requires a chat name")))
 	} else {
 		name := args[0]
-		dir, err := config.GetDefaultConversationsPath()
+		dir, err := config.GetDefaultChatsPath()
 		if err != nil {
-			c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to get default conversations path: %w", err)))
+			c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to get default chats path: %w", err)))
 			return
 		}
 		if len(args) > 2 && args[1] == "-d" {
@@ -190,49 +200,51 @@ func (c *commandHandler) saveConversation(args []string) {
 			}
 		}
 
-		// Save conversation
+		// Save chat
 		if err := c.m.ctxManager.Save(filepath.Join(dir, name)); err != nil {
-			c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to save conversation: %v", err)))
+			c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to save chat: %v", err)))
 		} else {
 			c.m.AddMessage(ui.FormatSuccess(fmt.Sprintf("Conversation '%s' saved successfully", name)))
 		}
 	}
 }
 
-func (c *commandHandler) loadConversation(args []string) {
+func (c *commandHandler) LoadChat(args []string) (tea.Model, tea.Cmd) {
 	if len(args) == 0 {
-		c.m.AddMessage(ui.FormatError(fmt.Errorf("/load requires a conversation file path")))
+		c.m.AddMessage(ui.FormatError(fmt.Errorf("/load requires a chat file path")))
 	} else {
-		path := args[0] + config.ConversationFileExt
+		path := args[0] + config.ChatFileExt
 
-		// Looking for relative path in default conversations directory
+		// Looking for relative path in default chats directory
 		if !filepath.IsAbs(path) {
-			defaultDir, err := config.GetDefaultConversationsPath()
+			defaultDir, err := config.GetDefaultChatsPath()
 			if err != nil {
-				c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to get default conversations path: %w", err)))
-				return
+				c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to get default chats path: %w", err)))
+				return c.m, nil
 			}
 
-			if _, err := os.Stat(path); err == nil {
+			if _, err := os.Stat(filepath.Join(defaultDir, path)); err == nil {
 				// File exists as given (relative to cwd), use it
 				path = filepath.Join(defaultDir, path)
 			}
 		}
 
-		// Load conversation
+		// Load chat
 		if absPath, err := utils.GetAbsolutePath(path); err != nil {
 			c.m.AddMessage(ui.FormatError(fmt.Errorf("invalid file path: %w", err)))
 		} else {
-			err := c.m.loadConversation(absPath)
+			err := c.m.loadChat(absPath)
 			if err != nil {
-				c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to load conversation: %v", err)))
+				c.m.AddMessage(ui.FormatError(fmt.Errorf("failed to load chat: %v", err)))
 			} else {
 				// Successfully loaded, set chatPath
 				c.m.chatPath = absPath
 			}
-			// Success message added in loadConversation
+			// Success message added in loadChat
 		}
 	}
+
+	return c.m, nil
 }
 
 func (c *commandHandler) copyLastAssistantMessage() {

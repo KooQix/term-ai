@@ -76,8 +76,8 @@ func (m chatModel) renderHeader() string {
 		Background(lipgloss.Color("#4A90E2"))
 
 	header := headerStyle.Render(" ✨ TermAI ") + " " +
-		profileStyle.Render(" "+m.profile.Name+" ") + " " +
-		profileStyle.Render(" "+m.profile.Model+" ")
+		profileStyle.Render(" "+m.Profile.Name+" ") + " " +
+		profileStyle.Render(" "+m.Profile.Model+" ")
 
 	if m.chatPath != "" {
 		chatPathStyle := lipgloss.NewStyle().

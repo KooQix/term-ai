@@ -38,6 +38,9 @@ var (
 
 	InfoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888"))
+	SystemStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFA500")).
+			Bold(true)
 )
 
 // ContentFormat represents the detected format of content
@@ -262,6 +265,10 @@ func highlightCode(code, language string) (string, error) {
 // FormatUserMessage formats a user message
 func FormatUserMessage(content string) string {
 	return UserStyle.Render("You: ") + content
+}
+
+func FormatSystemMessage(content string) string {
+	return SystemStyle.Render("System: ") + content
 }
 
 // FormatAssistantMessage formats an assistant message

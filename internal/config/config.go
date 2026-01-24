@@ -47,7 +47,7 @@ const (
 	ConfigFileName = "config.yaml"
 
 	ConversationsDirectory = "conversations"
-	ConversationFileExt    = ".termai.md"
+	ChatFileExt            = ".termai.md"
 )
 
 var AppConfig *Config
@@ -61,7 +61,7 @@ func GetConfigPath() (string, error) {
 	return filepath.Join(homeDir, ConfigDirName, ConfigFileName), nil
 }
 
-func GetDefaultConversationsPath() (string, error) {
+func GetDefaultChatsPath() (string, error) {
 	configDir, err := GetConfigDir()
 	if err != nil {
 		return "", err
@@ -209,7 +209,7 @@ func GetDisplayPath(originalPath string) string {
 		return ""
 	}
 
-	originalPath = strings.TrimSuffix(originalPath, ConversationFileExt)
+	originalPath = strings.TrimSuffix(originalPath, ChatFileExt)
 	return filepath.Base(originalPath)
 }
 
