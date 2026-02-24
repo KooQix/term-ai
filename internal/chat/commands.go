@@ -58,6 +58,8 @@ func (c *commandHandler) handle(cmd string) (tea.Model, tea.Cmd) {
 		c.addContext(args)
 	case "/context-remove":
 		c.removeContext(args)
+	case "/add-message":
+		c.addMessage(args)
 	case "/save":
 		c.saveChat(args)
 	case "/load":
@@ -166,6 +168,18 @@ func (c *commandHandler) removeContext(args []string) {
 		} else {
 			c.m.AddMessage(ui.FormatError(fmt.Errorf("file '%s' not found in context", filename)))
 		}
+	}
+}
+
+func (c *commandHandler) addMessage(args []string) {
+	if len(args) == 0 {
+		c.m.AddMessage(ui.FormatError(fmt.Errorf("/add-message requires a message text")))
+	} else {
+		text := strings.Join(args, " ")
+		// Add message to the context manager without sending it as a user message
+		// Add it to the ui as well so that the user can see it in the conversation history
+		c.m.ctxManager.AddUserMessage(text)
+		c.m.AddMessage(ui.FormatUserMessage(text))
 	}
 }
 

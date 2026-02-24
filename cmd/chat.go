@@ -28,6 +28,7 @@ const availableCommands = `Available commands:
   /context - Show context files from directory
   /context-add <file> [...] - Add files to context
   /context-remove <file> - Remove file from context
+  /add-message <text> - Add a user message to context without sending
   /save <name> -d <optional-directory> - Save conversation
   /load <path> - Load conversation from file
   /cp   - Copy the last assistant response to clipboard
@@ -46,7 +47,7 @@ var (
 	}
 
 	// Available chat commands for auto-completion
-	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove", "/save", "/load", "/cp"}
+	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove", "/add-message", "/save", "/load", "/cp"}
 )
 
 var chatListCmd = &cobra.Command{
