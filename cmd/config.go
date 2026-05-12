@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
+	"strings"
 
 	"github.com/KooQix/term-ai/internal/config"
 	"github.com/KooQix/term-ai/internal/ui"
@@ -48,14 +50,7 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Copy the config to replace all API Keys with ****
-	maskedCfg := *cfg
-	for i, profile := range maskedCfg.Profiles {
-		if profile.APIKey != "" {
-			maskedCfg.Profiles[i].APIKey = "****"
-		}
-	}
-
-	data, err := yaml.Marshal(maskedCfg)
+	data, err := MarshalYAMLRedacted(*cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
@@ -109,4 +104,99 @@ func runConfigEdit(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(ui.FormatSuccess("Configuration updated"))
 	return nil
+}
+
+// Helper functions for redacting sensitive fields in config display
+const sensitiveMask = "**"
+
+var sensitiveFields = []string{"api_key", "apikey", "secret"}
+
+func isSensitiveField(fieldName string) bool {
+	fieldName = strings.ToLower(fieldName)
+	for _, sensitive := range sensitiveFields {
+		if strings.Contains(fieldName, sensitive) {
+			return true
+		}
+	}
+	return false
+}
+
+// MarshalYAMLRedacted marshals v to YAML, replacing fields tagged
+// `sensitive:"true"` with "**". Original value is untouched.
+func MarshalYAMLRedacted(v any) ([]byte, error) {
+	redacted := redactValue("", reflect.ValueOf(v))
+	return yaml.Marshal(redacted.Interface())
+}
+
+func redactValue(key string, v reflect.Value) reflect.Value {
+	if !v.IsValid() {
+		return v
+	}
+
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		inner := redactValue(key, v.Elem())
+		// Wrap back into a pointer if needed
+		if v.Kind() == reflect.Ptr {
+			ptr := reflect.New(inner.Type())
+			ptr.Elem().Set(inner)
+			return ptr
+		}
+		return inner
+
+	case reflect.Struct:
+		t := v.Type()
+		// Build a new struct value we can write to
+		out := reflect.New(t).Elem()
+		for i := 0; i < t.NumField(); i++ {
+			field := t.Field(i)
+			if !field.IsExported() {
+				continue
+			}
+			fv := v.Field(i)
+
+			if field.Tag.Get("sensitive") == "true" || isSensitiveField(field.Name) {
+				// Replace with mask if field is a string; otherwise zero + mask via string
+				if fv.Kind() == reflect.String {
+					out.Field(i).SetString(sensitiveMask)
+				} else {
+					// For non-strings, set zero value (or handle differently)
+					// Alternative: marshal to a map for mixed types.
+					out.Field(i).Set(reflect.Zero(fv.Type()))
+				}
+				continue
+			}
+			out.Field(i).Set(redactValue(field.Name, fv))
+		}
+		return out
+
+	case reflect.Slice, reflect.Array:
+		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := 0; i < v.Len(); i++ {
+			out.Index(i).Set(redactValue("", v.Index(i)))
+		}
+		return out
+	case reflect.Map:
+		out := reflect.MakeMapWithSize(v.Type(), v.Len())
+		iter := v.MapRange()
+		for iter.Next() {
+			key := iter.Key()
+			out.SetMapIndex(key, redactValue(key.String(), iter.Value()))
+		}
+		return out
+
+	default:
+
+		if key != "" && isSensitiveField(key) {
+			if v.Kind() == reflect.String {
+				return reflect.ValueOf(sensitiveMask)
+			}
+			// For non-string types, we could choose to zero them out or handle differently
+			return reflect.Zero(v.Type())
+		}
+		return v
+	}
 }

@@ -166,7 +166,7 @@ func (m chatModel) renderFooter() string {
 		Background(lipgloss.Color("#1A1A1A"))
 
 	hints := footerStyle.Render(" /help /exit /clear /profile ")
-	shortcuts := footerStyle.Render(" Alt+Enter or Ctrl+Enter to send | Enter for new line | Ctrl+C=quit ")
+	shortcuts := footerStyle.Render(" Alt+Enter or Ctrl+Enter to send | Enter for new line | Ctrl+P=pager | Ctrl+C=quit ")
 
 	// Calculate spacing
 	totalWidth := m.viewport.Width
@@ -179,6 +179,13 @@ func (m chatModel) renderFooter() string {
 
 func (m *chatModel) updateViewport() {
 	content := strings.Join(m.messages, "\n")
+	// ANSI-aware soft-wrap at the current viewport width — measured in cells,
+	// not bytes, so lipgloss skips escape sequences when counting. Wrap stays
+	// at the render layer so resize re-flows automatically without baking
+	// newlines into m.messages.
+	if m.viewport.Width > 0 {
+		content = lipgloss.NewStyle().Width(m.viewport.Width).Render(content)
+	}
 	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()
 }

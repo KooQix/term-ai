@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/muesli/reflow/wordwrap"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +31,7 @@ const availableCommands = `Available commands:
   /save <name> -d <optional-directory> - Save conversation
   /load <path> - Load conversation from file
   /cp   - Copy the last assistant response to clipboard
+  /pager - Dump the chat into the terminal so you can scroll back and select/copy spans longer than the viewport (press Enter to return)
   /help - Show this help`
 
 var (
@@ -47,7 +47,7 @@ var (
 	}
 
 	// Available chat commands for auto-completion
-	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove", "/add-message", "/save", "/load", "/cp"}
+	chatCommands = []string{"/help", "/exit", "/quit", "/clear", "/profile", "/attach", "/files", "/clear-files", "/context", "/context-add", "/context-remove", "/add-message", "/save", "/load", "/cp", "/pager"}
 )
 
 var chatListCmd = &cobra.Command{
@@ -111,7 +111,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	ta.Placeholder = "Type your message... (Alt+Enter or Ctrl+Enter to send)"
 	ta.Focus()
 	ta.CharLimit = 0 // No limit
-	ta.SetWidth(80)
+	ta.SetWidth(150)
 	ta.SetHeight(3)
 
 	vp := viewport.New(150, 80)
@@ -162,7 +162,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	} else {
 		// If not loading a chat and starting fresh, then load the context from profile if any
 		if m.Profile.SystemContext != nil && *m.Profile.SystemContext != "" {
-			m.AddMessage(ui.FormatSystemMessage(wordwrap.String(*m.Profile.SystemContext, vp.Width-5)))
+			m.AddMessage(ui.FormatSystemMessage(*m.Profile.SystemContext))
 		}
 	}
 

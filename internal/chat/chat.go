@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/muesli/reflow/wordwrap"
 )
 
 type ChatCommands struct {
@@ -116,9 +115,6 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - 6 // Compact layout for maximum viewport space
 		m.textarea.SetWidth(msg.Width - 7) // Account for "You ▸ " prompt
-		if len(m.messages) > 0 {
-			m.viewport.SetContent(wordwrap.String(m.messages[len(m.messages)-1], m.viewport.Width))
-		}
 		m.ready = true
 		m.updateViewport()
 
@@ -150,6 +146,10 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			return m, tea.Quit
+		case tea.KeyCtrlP:
+			// Shortcut for /pager — bypass handle() so the textarea content
+			// isn't reset on the way through.
+			return m, m.commandsHandler.pager()
 		case tea.KeyEnter:
 			// Check for Alt+Enter or Ctrl+Enter to send message
 			if msg.Alt || strings.Contains(msg.String(), "ctrl+enter") {
@@ -202,11 +202,22 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if msg.chunk.Content != "" {
+		if msg.chunk.ToolCall != nil {
+			toolCall := msg.chunk.ToolCall
+			if toolCall.Result != "" {
+				m.messages = append(m.messages, ui.FormatToolCall(toolCall.Name, toolCall.Args))
+
+				m.updateViewport()
+			}
+
+		} else if msg.chunk.Content != "" {
+			// Send the result back to the provider (this part depends on how your provider expects tool results to be sent back)
 			m.currentResp += msg.chunk.Content
 			// Update last message with accumulated content
 			if len(m.messages) > 0 {
-				m.messages[len(m.messages)-1] = ui.AssistantStyle.Render("Assistant: ") + m.currentResp
+				m.messages[len(m.messages)-1] = ui.FormatAssistantMessage(m.currentResp)
+			} else {
+				m.messages = append(m.messages, ui.FormatAssistantMessage(m.currentResp))
 			}
 			m.updateViewport()
 		}
@@ -228,7 +239,7 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Replace the last message with formatted version
 			if len(m.messages) > 0 {
-				m.messages[len(m.messages)-1] = ui.AssistantStyle.Render("Assistant:\n") + formatted
+				m.messages[len(m.messages)-1] = ui.FormatAssistantMessage(formatted)
 			}
 
 			m.messages = append(m.messages, "")
@@ -371,7 +382,7 @@ func (m *chatModel) loadChat(path string) error {
 
 		var formatted string
 		if msg.Role == provider.RoleUser {
-			formatted = ui.FormatUserMessage(wordwrap.String(msg.Content, m.viewport.Width-5))
+			formatted = ui.FormatUserMessage(msg.Content)
 		} else if msg.Role == provider.RoleAssistant {
 			// Format the response with syntax highlighting
 			resp, err := ui.FormatResponse(msg.Content)
@@ -382,8 +393,7 @@ func (m *chatModel) loadChat(path string) error {
 			// Add the "Assistant:" prefix after formatting
 			formatted = ui.AssistantStyle.Render("Assistant:\n") + resp
 		} else if msg.Role == provider.RoleSystem {
-			// Display system messages differently
-			formatted = ui.FormatSystemMessage(wordwrap.String(msg.Content, m.viewport.Width-5))
+			formatted = ui.FormatSystemMessage(msg.Content)
 		}
 
 		m.messages = append(m.messages, formatted)
