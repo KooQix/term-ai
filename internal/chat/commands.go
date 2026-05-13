@@ -227,7 +227,11 @@ func (c *commandHandler) saveChat(args []string) {
 		} else {
 			c.m.AddMessage(ui.FormatSuccess(fmt.Sprintf("Conversation '%s' saved successfully", name)))
 		}
+
+		// Set the chatPath for future saves (so that subsequent /save commands without a name will overwrite the same file)
+		c.m.chatPath = filepath.Join(dir, name)
 	}
+
 }
 
 func (c *commandHandler) LoadChat(args []string) (tea.Model, tea.Cmd) {
