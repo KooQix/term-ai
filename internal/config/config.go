@@ -13,7 +13,7 @@ type Profile struct {
 	Name        string  `yaml:"name"`
 	Provider    string  `yaml:"provider"`
 	Endpoint    string  `yaml:"endpoint"`
-	APIKey      string  `yaml:"api_key"`
+	APIKey      string  `yaml:"api_key" sensitive:"true"`
 	Model       string  `yaml:"model"`
 	Temperature float64 `yaml:"temperature"`
 	MaxTokens   int     `yaml:"max_tokens"`
@@ -34,12 +34,19 @@ type FileConfig struct {
 	IncludeContextInEveryMsg bool  `yaml:"include_context_in_every_msg"` // Include context files in every message
 }
 
+type ToolsConfig struct {
+	MaxIter int                       `yaml:"max_iter"`     // Default max iterations for tools that support it (can be overridden by specific tool config)
+	Config  map[string]map[string]any `yaml:"tool_configs"` // Tool-specific configurations, keyed by tool name (e.g. "web_search": {"api_key
+}
+
 type Config struct {
 	DefaultProfile string     `yaml:"default_profile"`
 	Profiles       []Profile  `yaml:"profiles"`
 	UI             UIConfig   `yaml:"ui,omitempty"`
 	Files          FileConfig `yaml:"files,omitempty"`
 	SystemContext  string     `yaml:"system_context,omitempty"`
+
+	ToolConfigs ToolsConfig `yaml:"tool_configs"`
 }
 
 const (
@@ -51,6 +58,12 @@ const (
 )
 
 var AppConfig *Config
+
+func init() {
+	if _, err := Load(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+	}
+}
 
 // GetConfigPath returns the path to the config file
 func GetConfigPath() (string, error) {
@@ -98,6 +111,10 @@ func EnsureConfigDir() error {
 
 // Load reads and parses the config file
 func Load() (*Config, error) {
+	if AppConfig != nil {
+		return AppConfig, nil
+	}
+
 	configPath, err := GetConfigPath()
 	if err != nil {
 		return nil, err
@@ -106,7 +123,7 @@ func Load() (*Config, error) {
 	// Check if config exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// Create default config
-		if err := CreateDefaultConfig(); err != nil {
+		if err := createDefaultConfig(); err != nil {
 			return nil, fmt.Errorf("failed to create default config: %w", err)
 		}
 	}
@@ -116,14 +133,16 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	cfg := getDefaultConfig() // start with default config
+
+	// Unmarshal user config on top of default config to fill in any missing fields with defaults
+	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	AppConfig = &cfg
+	AppConfig = cfg
 
-	return &cfg, nil
+	return cfg, nil
 }
 
 // Save writes the config to file
@@ -156,8 +175,11 @@ func (c *Config) GetProfile(name string) (*Profile, error) {
 
 			// Load the correct context if needed
 			if p.SystemContext == nil {
-				// Use global system context
-				p.SystemContext = &c.SystemContext
+				// Use global system context — copy the value so a caller mutating
+				// *profile.SystemContext can't silently write through to the global
+				// config struct.
+				sysCtx := c.SystemContext
+				p.SystemContext = &sysCtx
 			} // else, use the profile-specific context (even if it's an empty string)
 
 			return &p, nil
@@ -213,13 +235,8 @@ func GetDisplayPath(originalPath string) string {
 	return filepath.Base(originalPath)
 }
 
-// CreateDefaultConfig creates a default configuration file
-func CreateDefaultConfig() error {
-	if err := EnsureConfigDir(); err != nil {
-		return err
-	}
-
-	defaultConfig := Config{
+func getDefaultConfig() *Config {
+	return &Config{
 		DefaultProfile: "abacus",
 		Profiles: []Profile{
 			{
@@ -263,8 +280,72 @@ func CreateDefaultConfig() error {
 			AutoClearAfterSend:       true,
 			IncludeContextInEveryMsg: false,
 		},
+		ToolConfigs: ToolsConfig{
+			MaxIter: 8,
+			Config:  make(map[string]map[string]any),
+		},
+
 		SystemContext: "You are an AI CLI assistant for a software developer. Provide clear, concise, and actionable responses focused on commands, debugging (including extended sessions), and project development tasks. Use markdown formatting for code and commands. Consider the current project context and previous interactions when necessary. Ask clarifying questions if the request is ambiguous. Avoid unnecessary explanations unless explicitly requested. Handle errors gracefully and suggest best practices or alternatives when appropriate.",
 	}
+}
+
+// createDefaultConfig creates a default configuration file
+func createDefaultConfig() error {
+	if err := EnsureConfigDir(); err != nil {
+		return err
+	}
+
+	defaultConfig := getDefaultConfig()
 
 	return defaultConfig.Save()
+}
+
+// RegisterToolConfig registers or updates configuration for a specific tool
+func RegisterToolConfig(toolName string, config any) error {
+	if AppConfig == nil {
+		panic("config not loaded") // this should never happen since AppConfig is initialized in init()
+	}
+
+	if AppConfig.ToolConfigs.Config == nil {
+		AppConfig.ToolConfigs.Config = make(map[string]map[string]any)
+	}
+
+	if _, ok := AppConfig.ToolConfigs.Config[toolName]; ok {
+		// No need to continue, the config has already been registered
+		return nil
+	}
+
+	b, err := yaml.Marshal(config)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal default config for %s: %v", toolName, err))
+	}
+	var cf map[string]any
+	if err := yaml.Unmarshal(b, &cf); err != nil {
+		panic(fmt.Sprintf("failed to unmarshal default config for %s: %v", toolName, err))
+	}
+
+	AppConfig.ToolConfigs.Config[toolName] = cf
+	return AppConfig.Save()
+}
+
+func ParseToolConfig(toolName string, config any) error {
+	if AppConfig == nil {
+		return fmt.Errorf("config not loaded")
+	}
+
+	cf, ok := AppConfig.ToolConfigs.Config[toolName]
+	if !ok {
+		return fmt.Errorf("no config found for tool '%s'", toolName)
+	}
+
+	b, err := yaml.Marshal(cf)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config for tool '%s': %w", toolName, err)
+	}
+
+	if err := yaml.Unmarshal(b, config); err != nil {
+		return fmt.Errorf("failed to unmarshal config for tool '%s': %w", toolName, err)
+	}
+
+	return nil
 }

@@ -24,6 +24,10 @@ var (
 			Foreground(lipgloss.Color("#7D56F4")).
 			Bold(true)
 
+	ToolStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFA500")).
+			Bold(true)
+
 	ThinkingStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFAA00")).
 			Italic(true)
@@ -301,4 +305,8 @@ func FormatSeparator() string {
 	style := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#444444"))
 	return style.Render(strings.Repeat("─", 80))
+}
+
+func FormatToolCall(name, args string) string {
+	return ToolStyle.Render("🔧 Tool Call: ") + ToolStyle.Render(name) + "\n" + InfoStyle.Render("Arguments: ") + args
 }

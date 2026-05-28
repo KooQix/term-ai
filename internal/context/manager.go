@@ -124,6 +124,9 @@ func (m *Manager) Load(filePath string) error {
 	m.messages = make([]provider.Message, 0)
 
 	scanner := bufio.NewScanner(file)
+	// Saved chats can contain long lines (pasted code, JSON, etc.); bufio's
+	// default 64KB cap would silently fail Scan(). Allow up to 10MB per line.
+	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
 	for scanner.Scan() {
 		// Read line by line
 		line := scanner.Text()

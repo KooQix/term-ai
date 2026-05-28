@@ -9,6 +9,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/KooQix/term-ai/internal/config"
+	"github.com/KooQix/term-ai/internal/tools"
 )
 
 // OpenAICompatible implements the Provider interface for OpenAI-compatible APIs
@@ -23,6 +26,7 @@ type OpenAICompatible struct {
 
 type chatRequest struct {
 	Model       string        `json:"model"`
+	Tools       []tools.Tool  `json:"tools,omitempty"`
 	Messages    []interface{} `json:"messages"` // Can be Message or messageWithContent
 	Temperature float64       `json:"temperature,omitempty"`
 	MaxTokens   int           `json:"max_tokens,omitempty"`
@@ -50,17 +54,8 @@ type imageURL struct {
 
 type chatResponse struct {
 	Choices []struct {
-		Message Message `json:"message"`
-	} `json:"choices"`
-}
-
-type streamResponse struct {
-	Choices []struct {
-		Delta struct {
-			Content  string `json:"content"`
-			Thinking string `json:"thinking,omitempty"`
-		} `json:"delta"`
-		FinishReason *string `json:"finish_reason"`
+		Message      Message `json:"message"`
+		FinishReason string  `json:"finish_reason"`
 	} `json:"choices"`
 }
 
@@ -106,159 +101,275 @@ func formatMessages(messages []Message) []interface{} {
 			}
 		} else {
 			// No images, use simple message format
-			formatted[i] = Message{
-				Role:    msg.Role,
-				Content: msg.Content,
-			}
+			formatted[i] = msg
 		}
 	}
 
 	return formatted
 }
 
-// Stream implements streaming chat completion
-func (p *OpenAICompatible) Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error) {
-	chatReq := chatRequest{
-		Model:       p.Model,
-		Messages:    formatMessages(messages),
-		Temperature: p.Temperature,
-		MaxTokens:   p.MaxTokens,
-		TopP:        p.TopP,
-		Stream:      true,
-	}
-
-	jsonData, err := json.Marshal(chatReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
+// request sends the chat request to the API and returns the raw HTTP response
+func (p *OpenAICompatible) request(ctx context.Context, chatReq chatRequest) (*http.Response, error) {
+	jsonData, _ := json.Marshal(chatReq)
 	url := strings.TrimSuffix(p.Endpoint, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
+	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonData))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("API %d: %s", resp.StatusCode, body)
 	}
 
-	chunkChan := make(chan StreamChunk)
+	return resp, nil
+}
 
-	go func() {
-		defer resp.Body.Close()
-		defer close(chunkChan)
+func (p *OpenAICompatible) chatMessage(messages []Message, stream bool) chatRequest {
+	return chatRequest{
+		Model:       p.Model,
+		Messages:    formatMessages(messages),
+		Tools:       tools.AvailableTools(),
+		Temperature: p.Temperature,
+		MaxTokens:   p.MaxTokens,
+		TopP:        p.TopP,
+		Stream:      stream,
+	}
+}
 
-		reader := bufio.NewReader(resp.Body)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
+// send dispatches the chat request and returns the raw response
+func (p *OpenAICompatible) send(ctx context.Context, messages []Message, stream bool) (*http.Response, error) {
+	chatReq := p.chatMessage(messages, stream)
+	return p.request(ctx, chatReq)
+}
+
+// parse the API response into chatResponse struct
+func (p *OpenAICompatible) parse(resp *http.Response) (chatResponse, error) {
+	var cr chatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+		resp.Body.Close()
+		return chatResponse{}, err
+	}
+	resp.Body.Close()
+
+	if len(cr.Choices) == 0 {
+		return chatResponse{}, fmt.Errorf("no choices")
+	}
+
+	return cr, nil
+}
+
+func (p *OpenAICompatible) streamOnce(
+	ctx context.Context,
+	messages []Message,
+	out chan<- StreamChunk,
+) (string, []tools.ToolCall, error) {
+
+	resp, err := p.send(ctx, messages, true)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Accumulator: index -> partial ToolCall
+	toolAcc := map[int]*tools.ToolCall{}
+	finishReason := ""
+
+	reader := bufio.NewReader(resp.Body)
+	for {
+		select {
+		case <-ctx.Done():
+			return "", nil, ctx.Err()
+		default:
+		}
+
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
 			}
+			return "", nil, err
+		}
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || !bytes.HasPrefix(line, []byte("data: ")) {
+			continue
+		}
+		data := bytes.TrimPrefix(line, []byte("data: "))
+		if bytes.Equal(data, []byte("[DONE]")) {
+			break
+		}
 
-			line, err := reader.ReadBytes('\n')
-			if err != nil {
-				if err != io.EOF {
-					chunkChan <- StreamChunk{Error: err}
-				}
-				return
-			}
+		var sr streamResponse
+		if err := json.Unmarshal(data, &sr); err != nil {
+			continue
+		}
+		if len(sr.Choices) == 0 {
+			continue
+		}
+		ch := sr.Choices[0]
 
-			line = bytes.TrimSpace(line)
-			if len(line) == 0 {
-				continue
-			}
-
-			if !bytes.HasPrefix(line, []byte("data: ")) {
-				continue
-			}
-
-			data := bytes.TrimPrefix(line, []byte("data: "))
-			if bytes.Equal(data, []byte("[DONE]")) {
-				chunkChan <- StreamChunk{Done: true}
-				return
-			}
-
-			var streamResp streamResponse
-			if err := json.Unmarshal(data, &streamResp); err != nil {
-				continue
-			}
-
-			if len(streamResp.Choices) > 0 {
-				delta := streamResp.Choices[0].Delta
-				if delta.Content != "" || delta.Thinking != "" {
-					chunkChan <- StreamChunk{
-						Content:  delta.Content,
-						Thinking: delta.Thinking,
-					}
-				}
-				if streamResp.Choices[0].FinishReason != nil {
-					chunkChan <- StreamChunk{Done: true}
-					return
-				}
+		// Text delta
+		if ch.Delta.Content != "" || ch.Delta.Thinking != "" {
+			out <- StreamChunk{
+				Content:  ch.Delta.Content,
+				Thinking: ch.Delta.Thinking,
 			}
 		}
+
+		// Tool call deltas — accumulate
+		for _, tcDelta := range ch.Delta.ToolCalls {
+			acc, ok := toolAcc[tcDelta.Index]
+			if !ok {
+				acc = &tools.ToolCall{Type: "function"}
+				toolAcc[tcDelta.Index] = acc
+			}
+			if tcDelta.ID != "" {
+				acc.ID = tcDelta.ID
+			}
+			if tcDelta.Function.Name != "" {
+				acc.Function.Name = tcDelta.Function.Name
+			}
+			// Arguments stream in fragments — concatenate
+			acc.Function.Arguments += tcDelta.Function.Arguments
+		}
+
+		if ch.FinishReason != nil {
+			finishReason = *ch.FinishReason
+		}
+	}
+
+	// Flatten accumulator into ordered slice
+	calls := make([]tools.ToolCall, 0, len(toolAcc))
+	for i := 0; i < len(toolAcc); i++ {
+		if tc, ok := toolAcc[i]; ok {
+			calls = append(calls, *tc)
+		}
+	}
+
+	return finishReason, calls, nil
+}
+
+func (p *OpenAICompatible) Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error) {
+	out := make(chan StreamChunk)
+
+	go func() {
+		defer close(out)
+
+		for iter := 0; iter < config.AppConfig.ToolConfigs.MaxIter; iter++ {
+			finished, toolCalls, err := p.streamOnce(ctx, messages, out)
+			if err != nil {
+				out <- StreamChunk{Error: err}
+				return
+			}
+
+			if finished == "stop" || finished == "" {
+				out <- StreamChunk{Done: true}
+				return
+			}
+
+			if finished != "tool_calls" || len(toolCalls) == 0 {
+				out <- StreamChunk{Done: true}
+				return
+			}
+
+			// Append assistant message with tool_calls
+			messages = append(messages, Message{
+				Role:      RoleAssistant,
+				Content:   "",
+				ToolCalls: toolCalls,
+			})
+
+			// Execute each tool and append result
+			for _, tc := range toolCalls {
+				out <- StreamChunk{ToolCall: &tools.ToolCallEvent{
+					Name: tc.Function.Name,
+					Args: tc.Function.Arguments,
+				}}
+
+				result, err := tools.ExecuteTool(tc.Function.Name, tc.Function.Arguments)
+				if err != nil {
+					result = fmt.Sprintf(`{"error": %q}`, err.Error())
+				}
+
+				out <- StreamChunk{ToolCall: &tools.ToolCallEvent{
+					Name:   tc.Function.Name,
+					Args:   tc.Function.Arguments,
+					Result: result,
+				}}
+
+				messages = append(messages, Message{
+					Role:       RoleTool,
+					ToolCallID: tc.ID,
+					Name:       tc.Function.Name,
+					Content:    result,
+				})
+			}
+			// Loop again — model now has tool results
+		}
+
+		out <- StreamChunk{Error: fmt.Errorf("max tool iterations reached")}
 	}()
 
-	return chunkChan, nil
+	return out, nil
 }
 
 // Complete implements non-streaming chat completion
 func (p *OpenAICompatible) Complete(ctx context.Context, messages []Message) (string, error) {
-	chatReq := chatRequest{
-		Model:       p.Model,
-		Messages:    formatMessages(messages),
-		Temperature: p.Temperature,
-		MaxTokens:   p.MaxTokens,
-		TopP:        p.TopP,
-		Stream:      false,
-	}
 
-	jsonData, err := json.Marshal(chatReq)
+	res, err := p.send(ctx, messages, false)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
 
-	url := strings.TrimSuffix(p.Endpoint, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonData))
+	chatResp, err := p.parse(res)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var chatResp chatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no response from API")
+		return "", err
 	}
 
 	return chatResp.Choices[0].Message.Content, nil
+}
+
+// CompleteWithTools runs the full tool-execution loop.
+func (p *OpenAICompatible) CompleteWithTools(ctx context.Context, messages []Message) (string, []Message, error) {
+	for i := 0; i < config.AppConfig.ToolConfigs.MaxIter; i++ {
+		res, err := p.send(ctx, messages, false)
+		if err != nil {
+			return "", messages, err
+		}
+
+		chatResp, err := p.parse(res)
+		if err != nil {
+			return "", messages, err
+		}
+
+		choice := chatResp.Choices[0]
+		assistantMsg := choice.Message
+		assistantMsg.Role = RoleAssistant
+		messages = append(messages, assistantMsg)
+
+		// Done?
+		if choice.FinishReason != "tool_calls" || len(assistantMsg.ToolCalls) == 0 {
+			return assistantMsg.Content, messages, nil
+		}
+
+		// Execute each tool call, append a role:"tool" message per call
+		for _, tc := range assistantMsg.ToolCalls {
+			result, err := tools.ExecuteTool(tc.Function.Name, tc.Function.Arguments)
+			if err != nil {
+				result = fmt.Sprintf(`{"error": %q}`, err.Error())
+			}
+
+			messages = append(messages, Message{
+				Role:       RoleTool,
+				ToolCallID: tc.ID,
+				Name:       tc.Function.Name,
+				Content:    result,
+			})
+		}
+	}
+	return "", messages, fmt.Errorf("tool loop exceeded %d iterations", config.AppConfig.ToolConfigs.MaxIter)
 }

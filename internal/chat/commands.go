@@ -1,7 +1,9 @@
 package chat
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,6 +68,11 @@ func (c *commandHandler) handle(cmd string) (tea.Model, tea.Cmd) {
 		c.LoadChat(args)
 	case "/cp":
 		c.copyLastAssistantMessage()
+	case "/pager":
+		pagerCmd := c.pager()
+		c.m.textarea.Reset()
+		c.m.updateViewport()
+		return c.m, pagerCmd
 	case "/help":
 		c.m.AddMessage(ui.InfoStyle.Render(c.m.commands.Available))
 	default:
@@ -220,7 +227,11 @@ func (c *commandHandler) saveChat(args []string) {
 		} else {
 			c.m.AddMessage(ui.FormatSuccess(fmt.Sprintf("Conversation '%s' saved successfully", name)))
 		}
+
+		// Set the chatPath for future saves (so that subsequent /save commands without a name will overwrite the same file)
+		c.m.chatPath = filepath.Join(dir, name)
 	}
+
 }
 
 func (c *commandHandler) LoadChat(args []string) (tea.Model, tea.Cmd) {
@@ -259,6 +270,75 @@ func (c *commandHandler) LoadChat(args []string) (tea.Model, tea.Cmd) {
 	}
 
 	return c.m, nil
+}
+
+// pagerExec is a tea.ExecCommand that dumps text to stdout and blocks until
+// the user presses Enter (\n or \r). Implemented in Go rather than as a shell
+// `cat + read` so we can control stdin/stdout precisely — the shell version
+// silently short-circuited on some setups (the `read` builtin returned
+// immediately, snapping Bubble Tea back into alt-screen before anything was
+// visible).
+type pagerExec struct {
+	content string
+	stdin   io.Reader
+	stdout  io.Writer
+	stderr  io.Writer
+}
+
+func (p *pagerExec) SetStdin(r io.Reader)  { p.stdin = r }
+func (p *pagerExec) SetStdout(w io.Writer) { p.stdout = w }
+func (p *pagerExec) SetStderr(w io.Writer) { p.stderr = w }
+
+func (p *pagerExec) Run() error {
+	if _, err := io.WriteString(p.stdout, p.content); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(p.stdout, "\n\033[7m press Enter to return to chat \033[0m "); err != nil {
+		return err
+	}
+
+	// Read byte-by-byte and stop on the first line terminator. Accepting both
+	// \n and \r covers cooked and raw modes — we don't want to depend on
+	// Bubble Tea's release leaving the tty in any specific state.
+	r := bufio.NewReader(p.stdin)
+	for {
+		b, err := r.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if b == '\n' || b == '\r' {
+			return nil
+		}
+	}
+}
+
+// pager dumps the current chat view to the main terminal buffer and blocks
+// on a "press Enter" prompt. While the prompt is up the user is fully outside
+// Bubble Tea's alt-screen — scroll the terminal natively (mouse wheel /
+// Cmd+Up), select across screens with the mouse, Cmd+C to copy. Press Enter
+// to resume the TUI.
+//
+// We deliberately don't use less / bat / $PAGER: those tools own the screen
+// (and often enter their own alt-screen), so the moment they quit Bubble Tea
+// re-enters alt-screen and hides everything before selection is possible. A
+// plain dump + read keeps the content visible in the main buffer for the
+// entire viewing window.
+func (c *commandHandler) pager() tea.Cmd {
+	content := strings.Join(c.m.messages, "\n")
+	if strings.TrimSpace(content) == "" {
+		c.m.AddMessage(ui.InfoStyle.Render("Nothing to view yet."))
+		return nil
+	}
+
+	return tea.Exec(&pagerExec{content: content}, func(err error) tea.Msg {
+		if err != nil {
+			return errMsg{err}
+		}
+		return nil
+	})
 }
 
 func (c *commandHandler) copyLastAssistantMessage() {

@@ -172,54 +172,43 @@ func runPrompt(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.AssistantStyle.Render("Assistant:"))
 	fmt.Println()
 
-	// Stream response
+	// One-shot mode: buffer the full response and print it formatted once.
+	// We can't stream raw chunks to stdout and then "upgrade" them to a
+	// formatted render (no in-place rewrite without an alt-screen), so the
+	// streamed path is disabled here on purpose — see the commented block
+	// below if you want to flip back to chunk-by-chunk output.
 	ui.ShowSpinner("Thinking")
-	chunkChan, err := prov.Stream(ctx, messages)
+	resp, _, err := prov.CompleteWithTools(ctx, messages)
+	ui.ClearSpinner()
 	if err != nil {
-		ui.ClearSpinner()
 		return fmt.Errorf("failed to get response: %w", err)
 	}
 
-	// ui.ClearSpinner()
+	// chunkChan, err := prov.Stream(ctx, messages)
+	// if err != nil {
+	// 	ui.ClearSpinner()
+	// 	return fmt.Errorf("failed to get response: %w", err)
+	// }
+	// for chunk := range chunkChan {
+	// 	if chunk.Error != nil {
+	// 		return fmt.Errorf("stream error: %w", chunk.Error)
+	// 	}
+	// 	if chunk.Thinking != "" {
+	// 		fmt.Print(chunk.Thinking)
+	// 	}
+	// 	if chunk.Content != "" {
+	// 		fmt.Print(chunk.Content)
+	// 	}
+	// 	if chunk.Done {
+	// 		break
+	// 	}
+	// }
 
-	// Stream raw content in real-time while accumulating
-	writer := ui.NewStreamWriter()
-	for chunk := range chunkChan {
-		if chunk.Error != nil {
-			return fmt.Errorf("stream error: %w", chunk.Error)
-		}
-		if chunk.Thinking != "" {
-			// Print and accumulate thinking
-			writer.WriteThinking(chunk.Thinking)
-		}
-		if chunk.Content != "" {
-			// Print raw content immediately for real-time feedback
-			writer.WriteContent(chunk.Content)
-		}
-		if chunk.Done {
-			break
-		}
-	}
-
-	// fmt.Println() // Add newline after raw streaming
-	ui.ClearSpinner() // Clear spinner after streaming is done
-	// Display separator line
-	// fmt.Println(ui.FormatSeparator())
-
-	// Now format and display the complete response with syntax highlighting
-	rawContent := writer.GetContent()
-	formatted, err := ui.FormatResponse(rawContent)
-	if err != nil {
-		// If formatting fails, raw content already shown above
-		fmt.Println()
-	} else {
-		// Show formatted version
-		// TODO: right now we disable the raw stream display to avoid duplication
-		// fmt.Println(ui.AssistantStyle.Render("Formatted:"))
-		// fmt.Println()
+	if formatted, ferr := ui.FormatResponse(resp); ferr == nil {
 		fmt.Println(formatted)
+	} else {
+		fmt.Println(resp)
 	}
-
 	fmt.Println()
 
 	return nil
