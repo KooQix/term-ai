@@ -43,6 +43,7 @@ var (
 		".ts":   true,
 		".tsx":  true,
 		".jsx":  true,
+		".vue":  true,
 		".java": true,
 		".c":    true,
 		".cpp":  true,
@@ -61,6 +62,111 @@ var (
 		".html": true,
 		".css":  true,
 		".sql":  true,
+
+		// JVM languages
+		".kt":     true, // Kotlin
+		".kts":    true, // Kotlin script
+		".scala":  true,
+		".groovy": true,
+		".clj":    true, // Clojure
+		".cljs":   true,
+
+		// .NET / Microsoft
+		".cs":  true, // C#
+		".fs":  true, // F#
+		".vb":  true, // Visual Basic
+		".ps1": true, // PowerShell
+
+		// Systems / low-level
+		".cxx":   true,
+		".hxx":   true,
+		".m":     true, // Objective-C
+		".mm":    true, // Objective-C++
+		".swift": true,
+		".zig":   true,
+		".d":     true, // D
+		".nim":   true,
+		".v":     true, // V / Verilog
+		".asm":   true,
+		".s":     true,
+
+		// Functional
+		".hs":   true, // Haskell
+		".ml":   true, // OCaml
+		".mli":  true,
+		".elm":  true,
+		".ex":   true, // Elixir
+		".exs":  true,
+		".erl":  true, // Erlang
+		".hrl":  true,
+		".lisp": true,
+		".lua":  true,
+
+		// Scripting / shells
+		".zsh":  true,
+		".fish": true,
+		".ksh":  true,
+		".bat":  true,
+		".cmd":  true,
+		".pl":   true, // Perl
+		".pm":   true,
+		".r":    true, // R
+		".jl":   true, // Julia
+		".dart": true,
+
+		// Web / frontend
+		".svelte": true,
+		".astro":  true,
+		".mjs":    true,
+		".cjs":    true,
+		".scss":   true,
+		".sass":   true,
+		".less":   true,
+		".styl":   true,
+		".htm":    true,
+
+		// Data / config / markup
+		".toml":       true,
+		".ini":        true,
+		".cfg":        true,
+		".conf":       true,
+		".env":        true,
+		".properties": true,
+		".csv":        true,
+		".tsv":        true,
+		".md":         true, // Markdown
+		".mdx":        true,
+		".rst":        true, // reStructuredText
+		".tex":        true, // LaTeX
+		".graphql":    true,
+		".gql":        true,
+		".proto":      true, // Protocol Buffers
+		".thrift":     true,
+		".avsc":       true, // Avro schema
+
+		// Infra as code
+		".tf":         true, // Terraform
+		".tfvars":     true,
+		".hcl":        true,
+		".dockerfile": true,
+		".nix":        true,
+
+		// Build / make
+		".mk":     true,
+		".cmake":  true,
+		".gradle": true,
+
+		// Notebooks / misc
+		".ipynb": true,
+		".sol":   true, // Solidity
+		".rkt":   true, // Racket
+		".cr":    true, // Crystal
+		".f":     true, // Fortran
+		".f90":   true,
+		".f95":   true,
+		".pas":   true, // Pascal
+		".ada":   true,
+		".cob":   true, // COBOL
 	}
 
 	pdfExtensions = map[string]bool{
