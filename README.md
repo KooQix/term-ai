@@ -523,3 +523,8 @@ If you encounter any issues or have questions:
 - Check existing issues for solutions
 - Read the troubleshooting section above
 
+
+---
+### ☕ Support
+If this saved you some time, you can buy me a coffee in crypto — non-custodial, I keep over 99% of every tip:
+👉 **[qbf.cash/@kooqix](https://qbf.cash/@kooqix)**
